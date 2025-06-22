@@ -130,32 +130,19 @@ export const WebsiteAnalytics: React.FC = () => {
                     <div className="text-2xl font-bold text-green-600">
                       {website.correlation_coefficient.toFixed(3)}
                     </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          window.open(`https://${website.domain}`, "_blank");
-                        }}
-                        title="Visit domain homepage"
-                      >
-                        <Globe className="h-4 w-4" />
-                      </Button>
-                      {website.example_url && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            window.open(website.example_url, "_blank");
-                          }}
-                          title="Visit example page"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const url =
+                          website.example_url || `https://${website.domain}`;
+                        window.open(url, "_blank");
+                      }}
+                      title="Visit page"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -214,8 +201,11 @@ export const WebsiteAnalytics: React.FC = () => {
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        window.open(`https://${website.domain}`, "_blank");
+                        const url =
+                          website.example_url || `https://${website.domain}`;
+                        window.open(url, "_blank");
                       }}
+                      title="Visit page"
                     >
                       <ExternalLink className="h-4 w-4" />
                     </Button>
@@ -253,12 +243,13 @@ export const WebsiteAnalytics: React.FC = () => {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() =>
-                        window.open(
-                          `https://${selectedWebsite.domain}`,
-                          "_blank"
-                        )
-                      }
+                      onClick={() => {
+                        const url =
+                          selectedWebsite.example_url ||
+                          `https://${selectedWebsite.domain}`;
+                        window.open(url, "_blank");
+                      }}
+                      title="Visit page"
                     >
                       <ExternalLink className="h-4 w-4" />
                     </Button>

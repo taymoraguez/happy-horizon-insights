@@ -5,14 +5,100 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WebsiteAnalytics } from "@/components/WebsiteAnalytics";
+import {
+  useDays,
+  useMessages,
+  usePersonAnalyses,
+  usePlaces,
+  useTimeAnalyses,
+  useWebsiteAnalyses,
+} from "@/hooks/useApi";
 import { djangoPost } from "@/lib/django";
 import { RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const Index = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedTimeAnalysis, setSelectedTimeAnalysis] = useState<
+    number | undefined
+  >(undefined);
+
+  // Fetch time analyses to get the most recent one
+  const { data: timeAnalyses, loading: timeAnalysesLoading } =
+    useTimeAnalyses();
+
+  // Use the most recent completed time analysis
+  useEffect(() => {
+    if (timeAnalyses?.length > 0 && !selectedTimeAnalysis) {
+      const completedAnalysis = timeAnalyses.find(
+        (ta) => ta.status === "completed"
+      );
+      if (completedAnalysis) {
+        setSelectedTimeAnalysis(completedAnalysis.id);
+      }
+    }
+  }, [timeAnalyses, selectedTimeAnalysis]);
+
+  // Fetch data for overview cards
+  const { data: days, loading: daysLoading } = useDays({
+    time_analysis: selectedTimeAnalysis,
+  });
+
+  const { data: places, loading: placesLoading } = usePlaces({
+    time_analysis: selectedTimeAnalysis,
+  });
+
+  const { data: websiteAnalyses, loading: websiteAnalysesLoading } =
+    useWebsiteAnalyses({
+      time_analysis: selectedTimeAnalysis,
+    });
+
+  const { data: personAnalyses, loading: personAnalysesLoading } =
+    usePersonAnalyses({
+      time_analysis: selectedTimeAnalysis,
+    });
+
+  const { data: messages, loading: messagesLoading } = useMessages({
+    time_analysis: selectedTimeAnalysis,
+  });
+
+  // Calculate metrics from fetched data
+  const metrics = useMemo(() => {
+    // Weekly average calculation
+    let weeklyAverage = 0;
+    if (days && days.length > 0) {
+      // Get last 7 days of data
+      const sortedDays = days.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      const lastWeekDays = sortedDays.slice(0, 7);
+      if (lastWeekDays.length > 0) {
+        const sum = lastWeekDays.reduce((acc, day) => acc + day.sentiment, 0);
+        weeklyAverage = sum / lastWeekDays.length;
+      }
+    }
+
+    // Convert sentiment from [-1, 1] range to [1, 10] range for display
+    const displaySentiment = ((weeklyAverage + 1) / 2) * 9 + 1;
+
+    return {
+      weeklyAverage: displaySentiment,
+      locationsCount: places?.length || 0,
+      websitesCount: websiteAnalyses?.length || 0,
+      messagesCount: messages?.length || 0,
+      contactsCount: personAnalyses?.length || 0,
+    };
+  }, [days, places, websiteAnalyses, personAnalyses, messages]);
+
+  const isLoading =
+    timeAnalysesLoading ||
+    daysLoading ||
+    placesLoading ||
+    websiteAnalysesLoading ||
+    personAnalysesLoading ||
+    messagesLoading;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -36,9 +122,7 @@ const Index = () => {
       setRefreshKey((prev) => prev + 1);
 
       // Show success message (you could add a toast notification here)
-      alert(
-        `Analysis "${newAnalysis.name}" created successfully! Status: ${newAnalysis.status}`
-      );
+      alert(`Analysis "${newAnalysis.name}" created successfully!`);
     } catch (error) {
       console.error("Error creating analysis:", error);
       alert(
@@ -59,7 +143,7 @@ const Index = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
-                HappyTracker
+                Happalyze
               </h1>
               <p className="text-gray-600 mt-1">
                 Your Personal Happiness Analytics Dashboard
@@ -81,7 +165,9 @@ const Index = () => {
                 />
               </Button>
               <div className="text-right">
-                <div className="text-2xl font-bold text-green-600">8.2</div>
+                <div className="text-2xl font-bold text-green-600">
+                  {isLoading ? "..." : metrics.weeklyAverage.toFixed(1)}
+                </div>
                 <div className="text-sm text-gray-500">
                   Current Happiness Score
                 </div>
@@ -100,8 +186,10 @@ const Index = () => {
               <CardTitle className="text-lg">Weekly Average</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">7.8</div>
-              <p className="text-green-100 text-sm">+0.3 from last week</p>
+              <div className="text-3xl font-bold">
+                {isLoading ? "..." : metrics.weeklyAverage.toFixed(1)}
+              </div>
+              <p className="text-green-100 text-sm">Last 7 days average</p>
             </CardContent>
           </Card>
 
@@ -110,8 +198,10 @@ const Index = () => {
               <CardTitle className="text-lg">Locations Tracked</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">12</div>
-              <p className="text-blue-100 text-sm">Across 3 cities</p>
+              <div className="text-3xl font-bold">
+                {isLoading ? "..." : metrics.locationsCount}
+              </div>
+              <p className="text-blue-100 text-sm">Places you've visited</p>
             </CardContent>
           </Card>
 
@@ -120,8 +210,10 @@ const Index = () => {
               <CardTitle className="text-lg">Websites Analyzed</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">247</div>
-              <p className="text-purple-100 text-sm">This month</p>
+              <div className="text-3xl font-bold">
+                {isLoading ? "..." : metrics.websitesCount}
+              </div>
+              <p className="text-purple-100 text-sm">Sites with correlations</p>
             </CardContent>
           </Card>
 
@@ -130,8 +222,12 @@ const Index = () => {
               <CardTitle className="text-lg">Messages Processed</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">1,234</div>
-              <p className="text-pink-100 text-sm">From 15 contacts</p>
+              <div className="text-3xl font-bold">
+                {isLoading ? "..." : metrics.messagesCount.toLocaleString()}
+              </div>
+              <p className="text-pink-100 text-sm">
+                From {isLoading ? "..." : metrics.contactsCount} contacts
+              </p>
             </CardContent>
           </Card>
         </div>

@@ -6,8 +6,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { usePlaces, useTimeAnalyses, type Place } from "@/hooks/useApi";
-import { MapPin, Navigation } from "lucide-react";
+import {
+  usePlaceAnalyses,
+  usePlaces,
+  useTimeAnalyses,
+  type Place,
+} from "@/hooks/useApi";
+import { Frown, Heart, MapPin, Navigation } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 // Transform Place data to include happiness score
@@ -335,6 +340,15 @@ export const MapView: React.FC = () => {
     time_analysis: selectedTimeAnalysis,
   });
 
+  // Fetch place analyses for happiness correlations
+  const {
+    data: placeAnalyses,
+    loading: placeAnalysesLoading,
+    error: placeAnalysesError,
+  } = usePlaceAnalyses({
+    time_analysis: selectedTimeAnalysis,
+  });
+
   const locationData = transformPlaceData(places || []);
 
   // Sort locations by score
@@ -342,7 +356,18 @@ export const MapView: React.FC = () => {
   const topPlaces = sortedByScore.slice(0, 5);
   const leastVisited = sortedByScore.slice(-3);
 
-  if (timeAnalysesLoading || placesLoading) {
+  // Get happiness-based rankings from place analyses
+  const happyPlaces = (placeAnalyses || [])
+    .filter((pa) => pa.correlation_coefficient > 0)
+    .sort((a, b) => b.correlation_coefficient - a.correlation_coefficient)
+    .slice(0, 3);
+
+  const sadPlaces = (placeAnalyses || [])
+    .filter((pa) => pa.correlation_coefficient < 0)
+    .sort((a, b) => a.correlation_coefficient - b.correlation_coefficient)
+    .slice(0, 3);
+
+  if (timeAnalysesLoading || placesLoading || placeAnalysesLoading) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
@@ -353,12 +378,14 @@ export const MapView: React.FC = () => {
     );
   }
 
-  if (placesError) {
+  if (placesError || placeAnalysesError) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
           <MapPin className="h-12 w-12 mx-auto mb-4 text-red-400" />
-          <p className="text-red-600">Error loading places: {placesError}</p>
+          <p className="text-red-600">
+            Error loading places: {placesError || placeAnalysesError}
+          </p>
         </div>
       </div>
     );
@@ -483,77 +510,111 @@ export const MapView: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Top Locations */}
-        <Card className="bg-white/70 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-green-600">Most Active Places</CardTitle>
-            <CardDescription>Your top 5 most visited locations</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {topPlaces.map((location, index) => (
-                <div
-                  key={location.id}
-                  className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                  onClick={() => setSelectedLocation(location)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="text-lg font-bold text-gray-400">
-                      #{index + 1}
-                    </div>
-                    <div>
-                      <div className="font-medium">{location.name}</div>
-                      <div className="text-sm text-gray-500">
-                        {location.visits} visits •{" "}
-                        {formatDuration(location.totalTime)} total
+        {/* Happiest Places */}
+        {happyPlaces.length > 0 && (
+          <Card className="bg-white/70 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-green-600 flex items-center gap-2">
+                <Heart className="h-5 w-5" />
+                Happiest Places
+              </CardTitle>
+              <CardDescription>
+                Places that boost your mood the most
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {happyPlaces.map((placeAnalysis, index) => {
+                  const matchingLocation = locationData.find(
+                    (loc) => loc.id === placeAnalysis.location
+                  );
+                  return (
+                    <div
+                      key={placeAnalysis.id}
+                      className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                      onClick={() =>
+                        matchingLocation &&
+                        setSelectedLocation(matchingLocation)
+                      }
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-lg font-bold text-green-600">
+                          #{index + 1}
+                        </div>
+                        <div>
+                          <div className="font-medium">
+                            {placeAnalysis.location_name || "Unknown Location"}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            Present {placeAnalysis.days_present} days •{" "}
+                            Correlation:{" "}
+                            {placeAnalysis.correlation_coefficient.toFixed(3)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-lg font-bold text-green-600">
+                        +{placeAnalysis.correlation_coefficient.toFixed(2)}
                       </div>
                     </div>
-                  </div>
-                  <div className="text-lg font-bold text-green-600">
-                    {location.score}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Least Visited Locations */}
-        <Card className="bg-white/70 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-orange-600">Rarely Visited</CardTitle>
-            <CardDescription>
-              Places you've been to less frequently
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {leastVisited.map((location, index) => (
-                <div
-                  key={location.id}
-                  className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                  onClick={() => setSelectedLocation(location)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="text-lg font-bold text-gray-400">
-                      #{index + 1}
-                    </div>
-                    <div>
-                      <div className="font-medium">{location.name}</div>
-                      <div className="text-sm text-gray-500">
-                        {location.visits} visits •{" "}
-                        {formatDuration(location.totalTime)} total
+        {/* Saddest Places */}
+        {sadPlaces.length > 0 && (
+          <Card className="bg-white/70 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-red-600 flex items-center gap-2">
+                <Frown className="h-5 w-5" />
+                Least Happy Places
+              </CardTitle>
+              <CardDescription>
+                Places that tend to lower your mood
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {sadPlaces.map((placeAnalysis, index) => {
+                  const matchingLocation = locationData.find(
+                    (loc) => loc.id === placeAnalysis.location
+                  );
+                  return (
+                    <div
+                      key={placeAnalysis.id}
+                      className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                      onClick={() =>
+                        matchingLocation &&
+                        setSelectedLocation(matchingLocation)
+                      }
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-lg font-bold text-red-600">
+                          #{index + 1}
+                        </div>
+                        <div>
+                          <div className="font-medium">
+                            {placeAnalysis.location_name || "Unknown Location"}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            Present {placeAnalysis.days_present} days •{" "}
+                            Correlation:{" "}
+                            {placeAnalysis.correlation_coefficient.toFixed(3)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-lg font-bold text-red-600">
+                        {placeAnalysis.correlation_coefficient.toFixed(2)}
                       </div>
                     </div>
-                  </div>
-                  <div className="text-lg font-bold text-orange-600">
-                    {location.score}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -79,6 +79,22 @@ export interface PersonAnalysis {
   created_at: string;
 }
 
+export interface PlaceAnalysis {
+  id: number;
+  location: number;
+  location_name: string;
+  location_address: string;
+  location_coordinates: [number, number];
+  correlation_coefficient: number;
+  days_present: number;
+  days_not_present: number;
+  avg_sentiment_when_present: number;
+  avg_sentiment_when_not_present: number;
+  total_visits: number;
+  significance_score: number;
+  created_at: string;
+}
+
 interface ApiFilters {
   start_date?: string;
   end_date?: string;
@@ -455,6 +471,44 @@ export const usePersonAnalyses = (filters?: ApiFilters) => {
 
     fetchData();
   }, [timeAnalysisId, latestLoading, filters?.limit]);
+
+  return { data, loading, error };
+};
+
+export const usePlaceAnalyses = (filters?: ApiFilters) => {
+  const [data, setData] = useState<PlaceAnalysis[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const params = new URLSearchParams();
+        if (filters?.time_analysis)
+          params.append("time_analysis", filters.time_analysis.toString());
+
+        const response = await fetch(
+          `/api/place-analyses/?${params.toString()}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        setData(result.results || result); // Handle paginated or direct array response
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [filters?.time_analysis]);
 
   return { data, loading, error };
 };
