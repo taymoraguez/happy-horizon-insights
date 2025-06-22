@@ -1,19 +1,60 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { MapPin, Navigation } from 'lucide-react';
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { usePlaces, useTimeAnalyses, type Place } from "@/hooks/useApi";
+import { MapPin, Navigation } from "lucide-react";
+import React, { useEffect, useState } from "react";
 
-// Mock location data with happiness scores
-const locationData = [
-  { id: 1, name: 'Home', lat: 40.7128, lng: -74.0060, score: 8.5, city: 'New York', visits: 45 },
-  { id: 2, name: 'Office', lat: 40.7589, lng: -73.9851, score: 6.8, city: 'New York', visits: 32 },
-  { id: 3, name: 'Central Park', lat: 40.7829, lng: -73.9654, score: 9.2, city: 'New York', visits: 12 },
-  { id: 4, name: 'Coffee Shop', lat: 40.7505, lng: -73.9934, score: 8.1, city: 'New York', visits: 28 },
-  { id: 5, name: 'Gym', lat: 40.7282, lng: -74.0776, score: 7.9, city: 'New York', visits: 18 },
-  { id: 6, name: 'Shopping Mall', lat: 40.7549, lng: -73.9840, score: 5.2, city: 'New York', visits: 8 },
-  { id: 7, name: 'Restaurant District', lat: 40.7505, lng: -73.9865, score: 8.7, city: 'New York', visits: 15 },
-  { id: 8, name: 'Library', lat: 40.7532, lng: -73.9822, score: 7.3, city: 'New York', visits: 9 },
-];
+// Transform Place data to include happiness score
+const transformPlaceData = (places: Place[]) => {
+  return places
+    .map((place) => {
+      // Calculate happiness score based on visit patterns
+      // More visits and longer stays generally indicate happier places
+      const visitScore = Math.min(place.visit_count / 10, 5); // Max 5 points for visits
+      const timeScore = Math.min(place.average_time_per_visit / 60, 3); // Max 3 points for time (hours)
+
+      // Base score of 5, add visit and time bonuses
+      const score = Math.min(5 + visitScore + timeScore, 10);
+
+      // Convert string coordinates to numbers
+      const lat = Number(place.center_latitude);
+      const lng = Number(place.center_longitude);
+
+      // Validate coordinates
+      if (isNaN(lat) || isNaN(lng)) {
+        console.warn(`Invalid coordinates for place ${place.id}:`, {
+          lat: place.center_latitude,
+          lng: place.center_longitude,
+        });
+        return null;
+      }
+
+      return {
+        id: place.id,
+        name: place.name || `Location ${place.id}`,
+        lat,
+        lng,
+        score: Number(score.toFixed(1)),
+        city: place.address || "Unknown",
+        visits: place.visit_count,
+        totalTime: place.total_time_minutes,
+        averageTime: place.average_time_per_visit,
+        activities: place.activity_types,
+        firstVisit: place.first_visit,
+        lastVisit: place.last_visit,
+      };
+    })
+    .filter((place): place is NonNullable<typeof place> => place !== null);
+};
+
+// Global state to track Google Maps loading
+const googleMapsPromise: Promise<typeof google> | null = null;
 
 declare global {
   interface Window {
@@ -21,58 +62,85 @@ declare global {
   }
 }
 
+type TransformedPlace = ReturnType<typeof transformPlaceData>[0];
+
 const GoogleMapComponent: React.FC<{
-  locations: typeof locationData;
-  selectedLocation: typeof locationData[0] | null;
-  onLocationSelect: (location: typeof locationData[0]) => void;
+  locations: TransformedPlace[];
+  selectedLocation: TransformedPlace | null;
+  onLocationSelect: (location: TransformedPlace) => void;
 }> = ({ locations, selectedLocation, onLocationSelect }) => {
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
 
   const getMarkerColor = (score: number) => {
-    if (score >= 8) return '#10b981'; // green-500
-    if (score >= 7) return '#4ade80'; // green-400
-    if (score >= 6) return '#eab308'; // yellow-500
-    if (score >= 5) return '#f97316'; // orange-500
-    return '#ef4444'; // red-500
+    if (score >= 8) return "#10b981"; // green-500
+    if (score >= 7) return "#4ade80"; // green-400
+    if (score >= 6) return "#eab308"; // yellow-500
+    if (score >= 5) return "#f97316"; // orange-500
+    return "#ef4444"; // red-500
   };
 
   useEffect(() => {
+    let script: HTMLScriptElement | null = null;
+
     const initMap = () => {
-      const mapElement = document.getElementById('google-map');
-      if (!mapElement) return;
+      const mapElement = document.getElementById("google-map");
+      if (!mapElement || locations.length === 0) return;
+
+      // Calculate center from all locations
+      const validLocations = locations.filter(
+        (loc) =>
+          !isNaN(loc.lat) &&
+          !isNaN(loc.lng) &&
+          isFinite(loc.lat) &&
+          isFinite(loc.lng)
+      );
+
+      if (validLocations.length === 0) {
+        console.warn("No valid locations with finite coordinates");
+        return;
+      }
+
+      const avgLat =
+        validLocations.reduce((sum, loc) => sum + loc.lat, 0) /
+        validLocations.length;
+      const avgLng =
+        validLocations.reduce((sum, loc) => sum + loc.lng, 0) /
+        validLocations.length;
 
       const newMap = new google.maps.Map(mapElement, {
-        center: { lat: 40.7589, lng: -73.9851 },
+        center: { lat: avgLat, lng: avgLng },
         zoom: 12,
         styles: [
           {
-            featureType: 'poi',
-            elementType: 'labels',
-            stylers: [{ visibility: 'off' }]
-          }
-        ]
+            featureType: "poi",
+            elementType: "labels",
+            stylers: [{ visibility: "off" }],
+          },
+        ],
       });
 
       setMap(newMap);
+      setIsMapLoaded(true);
 
       // Create markers
-      const newMarkers = locations.map(location => {
+      const newMarkers = validLocations.map((location) => {
         const marker = new google.maps.Marker({
           position: { lat: location.lat, lng: location.lng },
           map: newMap,
-          title: `${location.name} (${location.score})`,
+          title: `${location.name} (Score: ${location.score}, Visits: ${location.visits})`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
             fillColor: getMarkerColor(location.score),
             fillOpacity: 1,
             strokeWeight: 2,
-            strokeColor: '#ffffff',
-            scale: 10
-          }
+            strokeColor: "#ffffff",
+            scale: Math.max(8, Math.min(location.visits / 2, 15)), // Scale marker size by visits
+          },
         });
 
-        marker.addListener('click', () => {
+        marker.addListener("click", () => {
           onLocationSelect(location);
         });
 
@@ -82,44 +150,77 @@ const GoogleMapComponent: React.FC<{
       setMarkers(newMarkers);
     };
 
-    // Load Google Maps API if not already loaded
-    if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAdCr3UAgIRirmMnfGy5Tuc0QwiHJbyEEM&callback=initMap`;
-      script.async = true;
-      script.defer = true;
-      
-      // Set up callback
-      window.initMap = initMap;
-      
-      document.head.appendChild(script);
-    } else {
+    // Check if Google Maps is already loaded
+    if (typeof google !== "undefined" && typeof google.maps !== "undefined") {
       initMap();
+    } else {
+      // Check if script is already loading/loaded
+      const existingScript = document.querySelector(
+        'script[src*="maps.googleapis.com"]'
+      );
+
+      if (!existingScript && !window.googleMapsLoaded) {
+        script = document.createElement("script");
+        script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAdCr3UAgIRirmMnfGy5Tuc0QwiHJbyEEM&callback=initMapCallback`;
+        script.async = true;
+        script.defer = true;
+
+        // Set up a global callback that will call our local initMap
+        window.initMapCallback = () => {
+          window.googleMapsLoaded = true;
+          initMap();
+        };
+
+        document.head.appendChild(script);
+      } else if (window.googleMapsLoaded) {
+        // Maps already loaded, just initialize
+        initMap();
+      } else {
+        // Script is loading, wait for it
+        const checkLoaded = setInterval(() => {
+          if (
+            typeof google !== "undefined" &&
+            typeof google.maps !== "undefined"
+          ) {
+            clearInterval(checkLoaded);
+            initMap();
+          }
+        }, 100);
+
+        // Clean up interval after 10 seconds to avoid memory leaks
+        setTimeout(() => clearInterval(checkLoaded), 10000);
+      }
     }
 
     return () => {
       // Cleanup markers
-      markers.forEach(marker => marker.setMap(null));
+      markers.forEach((marker) => marker.setMap(null));
+
+      // Clean up callbacks (but be careful not to interfere with other instances)
+      if (window.initMap === initMap) {
+        delete window.initMap;
+      }
     };
-  }, []);
+  }, [locations]);
 
   // Update selected marker
   useEffect(() => {
     if (selectedLocation && markers.length > 0) {
-      markers.forEach(marker => {
-        const location = locations.find(loc => 
-          marker.getPosition()?.lat() === loc.lat && 
-          marker.getPosition()?.lng() === loc.lng
+      markers.forEach((marker) => {
+        const location = locations.find(
+          (loc) =>
+            marker.getPosition()?.lat() === loc.lat &&
+            marker.getPosition()?.lng() === loc.lng
         );
-        
+
         if (location?.id === selectedLocation.id) {
           marker.setIcon({
             path: google.maps.SymbolPath.CIRCLE,
             fillColor: getMarkerColor(location.score),
             fillOpacity: 1,
             strokeWeight: 4,
-            strokeColor: '#3b82f6',
-            scale: 12
+            strokeColor: "#3b82f6",
+            scale: Math.max(10, Math.min(location.visits / 2 + 2, 17)),
           });
         } else if (location) {
           marker.setIcon({
@@ -127,53 +228,58 @@ const GoogleMapComponent: React.FC<{
             fillColor: getMarkerColor(location.score),
             fillOpacity: 1,
             strokeWeight: 2,
-            strokeColor: '#ffffff',
-            scale: 10
+            strokeColor: "#ffffff",
+            scale: Math.max(8, Math.min(location.visits / 2, 15)),
           });
         }
       });
     }
-  }, [selectedLocation, markers]);
+  }, [selectedLocation, markers, locations]);
 
   return (
     <div className="relative">
       <div id="google-map" className="w-full h-96 rounded-lg"></div>
-      
+
       {/* Fallback message when Google Maps isn't available */}
-      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-100 to-green-100 rounded-lg">
-        <div className="text-center p-8">
-          <MapPin className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-          <p className="text-gray-600 mb-2">Interactive Google Map</p>
-          <p className="text-sm text-gray-500">
-            Add your Google Maps API key to enable the interactive map
-          </p>
+      {!isMapLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-100 to-green-100 rounded-lg">
+          <div className="text-center p-8">
+            <MapPin className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+            <p className="text-gray-600 mb-2">Loading Interactive Map...</p>
+            <p className="text-sm text-gray-500">
+              Please wait while the map loads
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Map Legend */}
       <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
-        <div className="text-sm font-semibold mb-2">Happiness Scale</div>
+        <div className="text-sm font-semibold mb-2">Location Score</div>
         <div className="space-y-1 text-xs">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-            <span>Very Happy (8.0+)</span>
+            <span>High Activity (8.0+)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-green-400 rounded-full"></div>
-            <span>Happy (7.0-7.9)</span>
+            <span>Active (7.0-7.9)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-            <span>Neutral (6.0-6.9)</span>
+            <span>Moderate (6.0-6.9)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-            <span>Somewhat Sad (5.0-5.9)</span>
+            <span>Low Activity (5.0-5.9)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-            <span>Sad (0-4.9)</span>
+            <span>Rare Visits (0-4.9)</span>
           </div>
+        </div>
+        <div className="text-xs text-gray-500 mt-2">
+          Marker size indicates visit frequency
         </div>
       </div>
     </div>
@@ -181,20 +287,94 @@ const GoogleMapComponent: React.FC<{
 };
 
 const getHappinessColor = (score: number) => {
-  if (score >= 8) return 'text-green-500 bg-green-100';
-  if (score >= 7) return 'text-green-400 bg-green-50';
-  if (score >= 6) return 'text-yellow-500 bg-yellow-100';
-  if (score >= 5) return 'text-orange-500 bg-orange-100';
-  return 'text-red-500 bg-red-100';
+  if (score >= 8) return "text-green-500 bg-green-100";
+  if (score >= 7) return "text-green-400 bg-green-50";
+  if (score >= 6) return "text-yellow-500 bg-yellow-100";
+  if (score >= 5) return "text-orange-500 bg-orange-100";
+  return "text-red-500 bg-red-100";
+};
+
+const formatDuration = (minutes: number) => {
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 };
 
 export const MapView: React.FC = () => {
-  const [selectedLocation, setSelectedLocation] = useState<typeof locationData[0] | null>(null);
+  const [selectedLocation, setSelectedLocation] =
+    useState<TransformedPlace | null>(null);
+  const [selectedTimeAnalysis, setSelectedTimeAnalysis] = useState<
+    number | undefined
+  >(undefined);
 
-  // Sort locations by happiness score
-  const sortedByHappiness = [...locationData].sort((a, b) => b.score - a.score);
-  const happiest = sortedByHappiness.slice(0, 5);
-  const leastHappy = sortedByHappiness.slice(-3);
+  // Fetch time analyses to get the most recent one
+  const { data: timeAnalyses, loading: timeAnalysesLoading } =
+    useTimeAnalyses();
+
+  // Use the most recent completed time analysis
+  useEffect(() => {
+    if (timeAnalyses?.length > 0 && !selectedTimeAnalysis) {
+      const completedAnalysis = timeAnalyses.find(
+        (ta) => ta.status === "completed"
+      );
+      if (completedAnalysis) {
+        setSelectedTimeAnalysis(completedAnalysis.id);
+      }
+    }
+  }, [timeAnalyses, selectedTimeAnalysis]);
+
+  // Fetch places for the selected time analysis
+  const {
+    data: places,
+    loading: placesLoading,
+    error: placesError,
+  } = usePlaces({
+    time_analysis: selectedTimeAnalysis,
+  });
+
+  const locationData = transformPlaceData(places || []);
+
+  // Sort locations by score
+  const sortedByScore = [...locationData].sort((a, b) => b.score - a.score);
+  const topPlaces = sortedByScore.slice(0, 5);
+  const leastVisited = sortedByScore.slice(-3);
+
+  if (timeAnalysesLoading || placesLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <MapPin className="h-12 w-12 mx-auto mb-4 text-gray-400 animate-pulse" />
+          <p className="text-gray-600">Loading location data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (placesError) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <MapPin className="h-12 w-12 mx-auto mb-4 text-red-400" />
+          <p className="text-red-600">Error loading places: {placesError}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (locationData.length === 0) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <MapPin className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+          <p className="text-gray-600">No location data available</p>
+          <p className="text-sm text-gray-500">
+            Run a time analysis to see your places
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -204,14 +384,15 @@ export const MapView: React.FC = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Navigation className="h-5 w-5" />
-              Location-Based Happiness Map
+              Your Places Map
             </CardTitle>
             <CardDescription>
-              Interactive Google Maps showing happiness levels across different locations
+              Interactive map showing your most visited locations with activity
+              scores
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <GoogleMapComponent 
+            <GoogleMapComponent
               locations={locationData}
               selectedLocation={selectedLocation}
               onLocationSelect={setSelectedLocation}
@@ -231,20 +412,64 @@ export const MapView: React.FC = () => {
             {selectedLocation ? (
               <div className="space-y-4">
                 <div>
-                  <h3 className="font-semibold text-lg">{selectedLocation.name}</h3>
+                  <h3 className="font-semibold text-lg">
+                    {selectedLocation.name}
+                  </h3>
                   <p className="text-gray-600">{selectedLocation.city}</p>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-2xl font-bold">{selectedLocation.score}</span>
+                  <span className="text-2xl font-bold">
+                    {selectedLocation.score}
+                  </span>
                   <Badge className={getHappinessColor(selectedLocation.score)}>
-                    {selectedLocation.score >= 8 ? 'Very Happy' : 
-                     selectedLocation.score >= 7 ? 'Happy' :
-                     selectedLocation.score >= 6 ? 'Neutral' :
-                     selectedLocation.score >= 5 ? 'Somewhat Sad' : 'Sad'}
+                    {selectedLocation.score >= 8
+                      ? "High Activity"
+                      : selectedLocation.score >= 7
+                      ? "Active"
+                      : selectedLocation.score >= 6
+                      ? "Moderate"
+                      : selectedLocation.score >= 5
+                      ? "Low Activity"
+                      : "Rare Visits"}
                   </Badge>
                 </div>
-                <div className="text-sm text-gray-600">
-                  <strong>{selectedLocation.visits}</strong> visits recorded
+                <div className="space-y-2 text-sm text-gray-600">
+                  <div className="flex justify-between">
+                    <span>Visits:</span>
+                    <strong>{selectedLocation.visits}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Time:</span>
+                    <strong>
+                      {formatDuration(selectedLocation.totalTime)}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Avg. per Visit:</span>
+                    <strong>
+                      {formatDuration(selectedLocation.averageTime)}
+                    </strong>
+                  </div>
+                  {Object.keys(selectedLocation.activities).length > 0 && (
+                    <div className="pt-2">
+                      <span className="text-xs font-medium text-gray-500">
+                        Activities:
+                      </span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {Object.entries(selectedLocation.activities).map(
+                          ([activity, count]) => (
+                            <Badge
+                              key={activity}
+                              variant="outline"
+                              className="text-xs"
+                            >
+                              {activity} ({count})
+                            </Badge>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -259,53 +484,69 @@ export const MapView: React.FC = () => {
         {/* Top Locations */}
         <Card className="bg-white/70 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-green-600">Happiest Places</CardTitle>
-            <CardDescription>Top 5 locations that bring you joy</CardDescription>
+            <CardTitle className="text-green-600">Most Active Places</CardTitle>
+            <CardDescription>Your top 5 most visited locations</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {happiest.map((location, index) => (
+              {topPlaces.map((location, index) => (
                 <div
                   key={location.id}
                   className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
                   onClick={() => setSelectedLocation(location)}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="text-lg font-bold text-gray-400">#{index + 1}</div>
+                    <div className="text-lg font-bold text-gray-400">
+                      #{index + 1}
+                    </div>
                     <div>
                       <div className="font-medium">{location.name}</div>
-                      <div className="text-sm text-gray-500">{location.visits} visits</div>
+                      <div className="text-sm text-gray-500">
+                        {location.visits} visits •{" "}
+                        {formatDuration(location.totalTime)} total
+                      </div>
                     </div>
                   </div>
-                  <div className="text-lg font-bold text-green-600">{location.score}</div>
+                  <div className="text-lg font-bold text-green-600">
+                    {location.score}
+                  </div>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
 
-        {/* Least Happy Locations */}
+        {/* Least Visited Locations */}
         <Card className="bg-white/70 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-red-600">Challenging Places</CardTitle>
-            <CardDescription>Locations that could use attention</CardDescription>
+            <CardTitle className="text-orange-600">Rarely Visited</CardTitle>
+            <CardDescription>
+              Places you've been to less frequently
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {leastHappy.map((location, index) => (
+              {leastVisited.map((location, index) => (
                 <div
                   key={location.id}
                   className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
                   onClick={() => setSelectedLocation(location)}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="text-lg font-bold text-gray-400">#{index + 1}</div>
+                    <div className="text-lg font-bold text-gray-400">
+                      #{index + 1}
+                    </div>
                     <div>
                       <div className="font-medium">{location.name}</div>
-                      <div className="text-sm text-gray-500">{location.visits} visits</div>
+                      <div className="text-sm text-gray-500">
+                        {location.visits} visits •{" "}
+                        {formatDuration(location.totalTime)} total
+                      </div>
                     </div>
                   </div>
-                  <div className="text-lg font-bold text-red-600">{location.score}</div>
+                  <div className="text-lg font-bold text-orange-600">
+                    {location.score}
+                  </div>
                 </div>
               ))}
             </div>

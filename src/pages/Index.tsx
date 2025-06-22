@@ -1,6 +1,6 @@
-import { CalendarView } from "@/components/CalendarView";
 import { MapView } from "@/components/MapView";
 import { MessageAnalytics } from "@/components/MessageAnalytics";
+import { OptimizedCalendarView } from "@/components/OptimizedCalendarView";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,10 +18,11 @@ const Index = () => {
     setIsRefreshing(true);
 
     try {
-      // Calculate date range - let's use the last 30 days
+      // Calculate date range - 4 months ago to tomorrow
       const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 1); // tomorrow
       const startDate = new Date();
-      startDate.setDate(endDate.getDate() - 30);
+      startDate.setMonth(startDate.getMonth() - 4); // 4 months ago
 
       // Create a new TimeAnalysis via the Django API using our utility
       const newAnalysis = await djangoPost("/api/time-analyses/", {
@@ -165,7 +166,7 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="calendar" className="space-y-6">
-            <CalendarView
+            <OptimizedCalendarView
               selectedDate={selectedDate}
               onDateSelect={setSelectedDate}
               refreshKey={refreshKey}

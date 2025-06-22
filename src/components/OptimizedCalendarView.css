@@ -1,0 +1,69 @@
+/* Custom styles for the optimized calendar component */
+.calendar-container {
+  display: flex;
+  justify-content: center;
+}
+
+.react-calendar-custom {
+  width: 100%;
+  max-width: none;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+}
+
+.react-calendar-custom .react-calendar__tile {
+  max-width: none;
+  height: 60px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 8px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  transition: all 0.2s;
+}
+
+.react-calendar-custom .react-calendar__tile:hover {
+  background: #f9fafb;
+  transform: scale(1.02);
+}
+
+.react-calendar-custom .react-calendar__tile.selected {
+  background: #dbeafe !important;
+  border-color: #3b82f6 !important;
+  color: #1d4ed8;
+}
+
+.react-calendar-custom .react-calendar__tile.has-data {
+  background: white;
+  border-color: #d1d5db;
+}
+
+.react-calendar-custom .react-calendar__month-view__weekdays {
+  text-transform: none;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.react-calendar-custom .react-calendar__navigation button {
+  color: #4b5563;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.react-calendar-custom .react-calendar__navigation button:hover {
+  background: #f3f4f6;
+}
+
+/* Remove red styling from weekend days */
+.react-calendar-custom .react-calendar__month-view__days__day--weekend {
+  color: inherit;
+}
+
+.react-calendar-custom .react-calendar__tile--weekend {
+  color: inherit;
+}

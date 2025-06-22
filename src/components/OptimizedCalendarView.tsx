@@ -16,19 +16,20 @@ import {
 } from "@/hooks/useApi";
 import {
   Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
   Frown,
   Loader2,
   MessageCircle,
   Smile,
 } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Calendar from "react-calendar";
+import "react-calendar/dist/Calendar.css";
+import "./OptimizedCalendarView.css";
 
-interface CalendarViewProps {
+interface OptimizedCalendarViewProps {
   selectedDate: Date | null;
   onDateSelect: (date: Date | null) => void;
-  refreshKey?: number; // Add refresh key to trigger API reload
+  refreshKey?: number;
 }
 
 // Convert sentiment score (-1 to 1) to happiness score (0 to 10)
@@ -52,59 +53,42 @@ const getHappinessLevel = (score: number) => {
   return "Sad";
 };
 
-// Helper function to format message text - moved to top level
+// Helper function to format message text
 const formatMessageText = (text: string, maxLength: number = 120) => {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength).trim() + "...";
 };
 
-export const CalendarView: React.FC<CalendarViewProps> = React.memo(
-  ({ selectedDate, onDateSelect, refreshKey = 0 }) => {
-    const [currentDate, setCurrentDate] = useState(new Date());
-    const [viewMode, setViewMode] = useState<"weekly" | "monthly">("weekly");
+export const OptimizedCalendarView: React.FC<OptimizedCalendarViewProps> =
+  React.memo(({ selectedDate, onDateSelect, refreshKey = 0 }) => {
+    const [activeStartDate, setActiveStartDate] = useState(new Date());
 
-    // Memoize date range calculation to prevent unnecessary recalculations
+    // Calculate date range for current month view with some buffer
     const dateRange = useMemo(() => {
-      if (viewMode === "weekly") {
-        const startOfWeek = new Date(currentDate);
-        startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6);
+      const startOfMonth = new Date(
+        activeStartDate.getFullYear(),
+        activeStartDate.getMonth(),
+        1
+      );
+      const endOfMonth = new Date(
+        activeStartDate.getFullYear(),
+        activeStartDate.getMonth() + 1,
+        0
+      );
 
-        return {
-          start_date: startOfWeek.toISOString().split("T")[0],
-          end_date: endOfWeek.toISOString().split("T")[0],
-        };
-      } else {
-        const startOfMonth = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth(),
-          1
-        );
-        const endOfMonth = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth() + 1,
-          0
-        );
+      // Add buffer days for calendar grid
+      const startDate = new Date(startOfMonth);
+      startDate.setDate(startDate.getDate() - 7); // Week buffer before
+      const endDate = new Date(endOfMonth);
+      endDate.setDate(endDate.getDate() + 7); // Week buffer after
 
-        // Extend to show full calendar grid (previous/next month days)
-        const startOfCalendar = new Date(startOfMonth);
-        startOfCalendar.setDate(
-          startOfCalendar.getDate() - startOfMonth.getDay()
-        );
-        const endOfCalendar = new Date(endOfMonth);
-        endOfCalendar.setDate(
-          endOfCalendar.getDate() + (6 - endOfMonth.getDay())
-        );
+      return {
+        start_date: startDate.toISOString().split("T")[0],
+        end_date: endDate.toISOString().split("T")[0],
+      };
+    }, [activeStartDate]);
 
-        return {
-          start_date: startOfCalendar.toISOString().split("T")[0],
-          end_date: endOfCalendar.toISOString().split("T")[0],
-        };
-      }
-    }, [currentDate, viewMode]);
-
-    // Fetch data from API
+    // Fetch happiness data for the current view
     const { data: daysData, loading, error } = useDays(dateRange);
 
     // Memoize selected date string to prevent unnecessary API calls
@@ -125,7 +109,7 @@ export const CalendarView: React.FC<CalendarViewProps> = React.memo(
         limit: 5,
       });
 
-    // Memoize happiness data conversion to prevent recalculation on every render
+    // Memoize happiness data conversion
     const happinessData = useMemo(() => {
       const dataMap: Record<
         string,
@@ -150,69 +134,67 @@ export const CalendarView: React.FC<CalendarViewProps> = React.memo(
       return dataMap;
     }, [daysData]);
 
-    // Memoize week days generation
-    const generateWeekDays = useCallback((startDate: Date) => {
-      const days = [];
-      const start = new Date(startDate);
-      start.setDate(start.getDate() - start.getDay()); // Start from Sunday
-
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(start);
-        date.setDate(date.getDate() + i);
-        days.push(date);
-      }
-      return days;
-    }, []);
-
-    // Memoize month days generation
-    const generateMonthDays = useCallback((date: Date) => {
-      const year = date.getFullYear();
-      const month = date.getMonth();
-      const firstDay = new Date(year, month, 1);
-      const startDate = new Date(firstDay);
-
-      // Get the first day of the week for the first day of the month
-      startDate.setDate(startDate.getDate() - startDate.getDay());
-
-      const days = [];
-      const current = new Date(startDate);
-
-      // Generate 6 weeks worth of days (42 days)
-      for (let i = 0; i < 42; i++) {
-        days.push(new Date(current));
-        current.setDate(current.getDate() + 1);
-      }
-
-      return { days, currentMonth: month, currentYear: year };
-    }, []);
-
-    // Memoize navigation handlers
-    const navigateWeek = useCallback(
-      (direction: "prev" | "next") => {
-        const newDate = new Date(currentDate);
-        newDate.setDate(newDate.getDate() + (direction === "next" ? 7 : -7));
-        setCurrentDate(newDate);
+    // Handle date selection
+    const handleDateChange = useCallback(
+      (value: Date | Date[]) => {
+        const date = Array.isArray(value) ? value[0] : value;
+        onDateSelect(date);
       },
-      [currentDate]
+      [onDateSelect]
     );
 
-    const navigateMonth = useCallback(
-      (direction: "prev" | "next") => {
-        const newDate = new Date(currentDate);
-        newDate.setMonth(newDate.getMonth() + (direction === "next" ? 1 : -1));
-        setCurrentDate(newDate);
+    // Handle month navigation
+    const handleActiveStartDateChange = useCallback(
+      ({ activeStartDate }: { activeStartDate: Date }) => {
+        setActiveStartDate(activeStartDate);
       },
-      [currentDate]
+      []
     );
 
-    // Memoize generated days to prevent recalculation
-    const weekDays = useMemo(
-      () => generateWeekDays(currentDate),
-      [generateWeekDays, currentDate]
+    // Custom tile content to show happiness data
+    const tileContent = useCallback(
+      ({ date }: { date: Date }) => {
+        const dateKey = date.toISOString().split("T")[0];
+        const dayData = happinessData[dateKey];
+
+        if (!dayData) return null;
+
+        return (
+          <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2">
+            <div
+              className={`w-4 h-4 rounded-full ${getHappinessColor(
+                dayData.score
+              )}`}
+              title={`Happiness: ${dayData.score.toFixed(1)} (${
+                dayData.message_count
+              } messages)`}
+            />
+          </div>
+        );
+      },
+      [happinessData]
     );
-    const monthData = useMemo(
-      () => generateMonthDays(currentDate),
-      [generateMonthDays, currentDate]
+
+    // Custom tile className to highlight selected date
+    const tileClassName = useCallback(
+      ({ date }: { date: Date }) => {
+        const dateKey = date.toISOString().split("T")[0];
+        const dayData = happinessData[dateKey];
+        const isSelected = selectedDate?.toDateString() === date.toDateString();
+
+        let classes = "calendar-tile";
+
+        if (dayData) {
+          classes += " has-data";
+        }
+
+        if (isSelected) {
+          classes += " selected";
+        }
+
+        return classes;
+      },
+      [happinessData, selectedDate]
     );
 
     // Refresh data when refreshKey changes
@@ -254,13 +236,12 @@ export const CalendarView: React.FC<CalendarViewProps> = React.memo(
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <CalendarIcon className="h-5 w-5" />
-                    Happiness Calendar
+                    Happiness Calendar (Optimized)
                     {loading && (
                       <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
                     )}
                   </CardTitle>
                   <CardDescription>
-                    {viewMode === "weekly" ? "Weekly view" : "Monthly view"} -
                     Click on any day to view detailed happiness data
                     {daysData.length > 0 && (
                       <span className="ml-2 text-green-600">
@@ -269,190 +250,23 @@ export const CalendarView: React.FC<CalendarViewProps> = React.memo(
                     )}
                   </CardDescription>
                 </div>
-                <div className="flex gap-2">
-                  <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-                    <Button
-                      variant={viewMode === "weekly" ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setViewMode("weekly")}
-                      className="px-3 py-1 text-xs"
-                      disabled={loading}
-                    >
-                      Weekly
-                    </Button>
-                    <Button
-                      variant={viewMode === "monthly" ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setViewMode("monthly")}
-                      className="px-3 py-1 text-xs"
-                      disabled={loading}
-                    >
-                      Monthly
-                    </Button>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      viewMode === "weekly"
-                        ? navigateWeek("prev")
-                        : navigateMonth("prev")
-                    }
-                    disabled={loading}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      viewMode === "weekly"
-                        ? navigateWeek("next")
-                        : navigateMonth("next")
-                    }
-                    disabled={loading}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
               </div>
             </CardHeader>
             <CardContent>
-              {viewMode === "weekly" ? (
-                <>
-                  <div className="text-center mb-4 text-lg font-semibold text-gray-700">
-                    Week of{" "}
-                    {currentDate.toLocaleDateString("en-US", {
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </div>
-                  <div className="grid grid-cols-7 gap-2 mb-6">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                      (day) => (
-                        <div
-                          key={day}
-                          className="text-center text-sm font-medium text-gray-500 py-2"
-                        >
-                          {day}
-                        </div>
-                      )
-                    )}
-                    {weekDays.map((date) => {
-                      const dateKey = date.toISOString().split("T")[0];
-                      const dayData = happinessData[dateKey];
-                      const isSelected =
-                        selectedDate?.toDateString() === date.toDateString();
-
-                      return (
-                        <div
-                          key={dateKey}
-                          className={`relative p-4 rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 ${
-                            isSelected
-                              ? "ring-2 ring-blue-500 ring-offset-2"
-                              : ""
-                          } ${
-                            dayData
-                              ? getHappinessColor(dayData.score)
-                              : "bg-gray-100"
-                          } ${loading ? "opacity-60" : ""}`}
-                          onClick={() => !loading && onDateSelect(date)}
-                        >
-                          <div
-                            className={`font-semibold text-center ${
-                              dayData ? "text-white" : "text-gray-600"
-                            }`}
-                          >
-                            {date.getDate()}
-                          </div>
-                          {dayData && (
-                            <div className="text-xs text-white text-center mt-1 font-bold">
-                              {dayData.score.toFixed(1)}
-                            </div>
-                          )}
-                          {dayData && (
-                            <div className="text-xs text-white text-center opacity-80">
-                              {dayData.message_count} msgs
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-center mb-4 text-lg font-semibold text-gray-700">
-                    {new Date(
-                      monthData.currentYear,
-                      monthData.currentMonth
-                    ).toLocaleDateString("en-US", {
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 mb-6">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                      (day) => (
-                        <div
-                          key={day}
-                          className="text-center text-sm font-medium text-gray-500 py-2"
-                        >
-                          {day}
-                        </div>
-                      )
-                    )}
-                    {monthData.days.map((date, index) => {
-                      const dateKey = date.toISOString().split("T")[0];
-                      const dayData = happinessData[dateKey];
-                      const isSelected =
-                        selectedDate?.toDateString() === date.toDateString();
-                      const isCurrentMonth =
-                        date.getMonth() === monthData.currentMonth;
-
-                      return (
-                        <div
-                          key={index}
-                          className={`relative p-2 rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 min-h-[60px] flex flex-col items-center justify-center ${
-                            isSelected
-                              ? "ring-2 ring-blue-500 ring-offset-1"
-                              : ""
-                          } ${
-                            dayData
-                              ? getHappinessColor(dayData.score)
-                              : "bg-gray-100"
-                          } ${!isCurrentMonth ? "opacity-40" : ""} ${
-                            loading ? "opacity-60" : ""
-                          }`}
-                          onClick={() => !loading && onDateSelect(date)}
-                        >
-                          <div
-                            className={`text-sm font-semibold ${
-                              dayData ? "text-white" : "text-gray-600"
-                            }`}
-                          >
-                            {date.getDate()}
-                          </div>
-                          {dayData && (
-                            <>
-                              <div className="text-xs text-white font-bold">
-                                {dayData.score.toFixed(1)}
-                              </div>
-                              <div className="text-xs text-white opacity-80">
-                                {dayData.message_count}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
+              <div className="calendar-container">
+                <Calendar
+                  onChange={handleDateChange}
+                  value={selectedDate}
+                  onActiveStartDateChange={handleActiveStartDateChange}
+                  tileContent={tileContent}
+                  tileClassName={tileClassName}
+                  showNeighboringMonth={false}
+                  className="react-calendar-custom"
+                />
+              </div>
 
               {/* Legend */}
-              <div className="flex flex-wrap gap-4 text-sm">
+              <div className="flex flex-wrap gap-4 text-sm mt-6">
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 bg-green-500 rounded"></div>
                   <span>Very Happy (8.0+)</span>
@@ -655,7 +469,6 @@ export const CalendarView: React.FC<CalendarViewProps> = React.memo(
         </div>
       </div>
     );
-  }
-);
+  });
 
-CalendarView.displayName = "CalendarView";
+OptimizedCalendarView.displayName = "OptimizedCalendarView";
