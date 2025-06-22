@@ -53,14 +53,55 @@ const transformPlaceData = (places: Place[]) => {
     .filter((place): place is NonNullable<typeof place> => place !== null);
 };
 
-// Global state to track Google Maps loading
-const googleMapsPromise: Promise<typeof google> | null = null;
+// Utility function to load Google Maps API only once
+const loadGoogleMaps = (() => {
+  let promise: Promise<typeof google> | null = null;
 
-declare global {
-  interface Window {
-    initMap: () => void;
-  }
-}
+  return (): Promise<typeof google> => {
+    if (promise) return promise;
+
+    if (typeof google !== "undefined" && typeof google.maps !== "undefined") {
+      return Promise.resolve(google);
+    }
+
+    promise = new Promise((resolve, reject) => {
+      // Check if script is already being loaded
+      if (document.querySelector('script[src*="maps.googleapis.com"]')) {
+        // Wait for existing script to load
+        const checkLoaded = () => {
+          if (
+            typeof google !== "undefined" &&
+            typeof google.maps !== "undefined"
+          ) {
+            resolve(google);
+          } else {
+            setTimeout(checkLoaded, 100);
+          }
+        };
+        checkLoaded();
+        return;
+      }
+
+      // Create unique callback name
+      const callbackName = `initMap_${Date.now()}`;
+
+      (window as any)[callbackName] = () => {
+        delete (window as any)[callbackName];
+        resolve(google);
+      };
+
+      const script = document.createElement("script");
+      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAdCr3UAgIRirmMnfGy5Tuc0QwiHJbyEEM&callback=${callbackName}`;
+      script.async = true;
+      script.defer = true;
+      script.onerror = reject;
+
+      document.head.appendChild(script);
+    });
+
+    return promise;
+  };
+})();
 
 type TransformedPlace = ReturnType<typeof transformPlaceData>[0];
 
