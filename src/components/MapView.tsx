@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, Navigation } from 'lucide-react';
@@ -16,20 +16,171 @@ const locationData = [
   { id: 8, name: 'Library', lat: 40.7532, lng: -73.9822, score: 7.3, city: 'New York', visits: 9 },
 ];
 
+const GoogleMapComponent: React.FC<{
+  locations: typeof locationData;
+  selectedLocation: typeof locationData[0] | null;
+  onLocationSelect: (location: typeof locationData[0]) => void;
+}> = ({ locations, selectedLocation, onLocationSelect }) => {
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
+
+  const getMarkerColor = (score: number) => {
+    if (score >= 8) return '#10b981'; // green-500
+    if (score >= 7) return '#4ade80'; // green-400
+    if (score >= 6) return '#eab308'; // yellow-500
+    if (score >= 5) return '#f97316'; // orange-500
+    return '#ef4444'; // red-500
+  };
+
+  useEffect(() => {
+    const initMap = () => {
+      const mapElement = document.getElementById('google-map');
+      if (!mapElement) return;
+
+      const newMap = new google.maps.Map(mapElement, {
+        center: { lat: 40.7589, lng: -73.9851 },
+        zoom: 12,
+        styles: [
+          {
+            featureType: 'poi',
+            elementType: 'labels',
+            stylers: [{ visibility: 'off' }]
+          }
+        ]
+      });
+
+      setMap(newMap);
+
+      // Create markers
+      const newMarkers = locations.map(location => {
+        const marker = new google.maps.Marker({
+          position: { lat: location.lat, lng: location.lng },
+          map: newMap,
+          title: `${location.name} (${location.score})`,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: getMarkerColor(location.score),
+            fillOpacity: 1,
+            strokeWeight: 2,
+            strokeColor: '#ffffff',
+            scale: 10
+          }
+        });
+
+        marker.addListener('click', () => {
+          onLocationSelect(location);
+        });
+
+        return marker;
+      });
+
+      setMarkers(newMarkers);
+    };
+
+    // Load Google Maps API if not already loaded
+    if (typeof google === 'undefined') {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap`;
+      script.async = true;
+      script.defer = true;
+      
+      // Set up callback
+      (window as any).initMap = initMap;
+      
+      document.head.appendChild(script);
+    } else {
+      initMap();
+    }
+
+    return () => {
+      // Cleanup markers
+      markers.forEach(marker => marker.setMap(null));
+    };
+  }, []);
+
+  // Update selected marker
+  useEffect(() => {
+    if (selectedLocation && markers.length > 0) {
+      markers.forEach(marker => {
+        const location = locations.find(loc => 
+          marker.getPosition()?.lat() === loc.lat && 
+          marker.getPosition()?.lng() === loc.lng
+        );
+        
+        if (location?.id === selectedLocation.id) {
+          marker.setIcon({
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: getMarkerColor(location.score),
+            fillOpacity: 1,
+            strokeWeight: 4,
+            strokeColor: '#3b82f6',
+            scale: 12
+          });
+        } else if (location) {
+          marker.setIcon({
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: getMarkerColor(location.score),
+            fillOpacity: 1,
+            strokeWeight: 2,
+            strokeColor: '#ffffff',
+            scale: 10
+          });
+        }
+      });
+    }
+  }, [selectedLocation, markers]);
+
+  return (
+    <div className="relative">
+      <div id="google-map" className="w-full h-96 rounded-lg"></div>
+      
+      {/* Fallback message when Google Maps isn't available */}
+      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-100 to-green-100 rounded-lg">
+        <div className="text-center p-8">
+          <MapPin className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+          <p className="text-gray-600 mb-2">Interactive Google Map</p>
+          <p className="text-sm text-gray-500">
+            Add your Google Maps API key to enable the interactive map
+          </p>
+        </div>
+      </div>
+
+      {/* Map Legend */}
+      <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
+        <div className="text-sm font-semibold mb-2">Happiness Scale</div>
+        <div className="space-y-1 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+            <span>Very Happy (8.0+)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+            <span>Happy (7.0-7.9)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+            <span>Neutral (6.0-6.9)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+            <span>Somewhat Sad (5.0-5.9)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+            <span>Sad (0-4.9)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const getHappinessColor = (score: number) => {
   if (score >= 8) return 'text-green-500 bg-green-100';
   if (score >= 7) return 'text-green-400 bg-green-50';
   if (score >= 6) return 'text-yellow-500 bg-yellow-100';
   if (score >= 5) return 'text-orange-500 bg-orange-100';
   return 'text-red-500 bg-red-100';
-};
-
-const getPinColor = (score: number) => {
-  if (score >= 8) return 'bg-green-500';
-  if (score >= 7) return 'bg-green-400';
-  if (score >= 6) return 'text-yellow-500';
-  if (score >= 5) return 'bg-orange-500';
-  return 'bg-red-500';
 };
 
 export const MapView: React.FC = () => {
@@ -51,70 +202,15 @@ export const MapView: React.FC = () => {
               Location-Based Happiness Map
             </CardTitle>
             <CardDescription>
-              Interactive map showing happiness levels across different locations
+              Interactive Google Maps showing happiness levels across different locations
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Simulated Map View */}
-            <div className="relative bg-gradient-to-br from-blue-100 to-green-100 rounded-lg h-96 overflow-hidden">
-              {/* Map Background Pattern */}
-              <div className="absolute inset-0 opacity-20">
-                <div className="grid grid-cols-8 grid-rows-6 h-full">
-                  {Array.from({ length: 48 }).map((_, i) => (
-                    <div key={i} className="border border-gray-300"></div>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Location Pins */}
-              {locationData.map((location) => (
-                <div
-                  key={location.id}
-                  className="absolute cursor-pointer transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform"
-                  style={{
-                    left: `${20 + (location.id * 10)}%`,
-                    top: `${15 + (location.id * 8)}%`,
-                  }}
-                  onClick={() => setSelectedLocation(location)}
-                >
-                  <div className={`relative ${getPinColor(location.score)} w-6 h-6 rounded-full flex items-center justify-center shadow-lg`}>
-                    <MapPin className="h-4 w-4 text-white" />
-                    {selectedLocation?.id === location.id && (
-                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-black text-white px-2 py-1 rounded text-xs whitespace-nowrap">
-                        {location.name}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              
-              {/* Map Legend */}
-              <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
-                <div className="text-sm font-semibold mb-2">Happiness Scale</div>
-                <div className="space-y-1 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span>Very Happy (8.0+)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-green-400 rounded-full"></div>
-                    <span>Happy (7.0-7.9)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    <span>Neutral (6.0-6.9)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                    <span>Somewhat Sad (5.0-5.9)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <span>Sad (0-4.9)</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <GoogleMapComponent 
+              locations={locationData}
+              selectedLocation={selectedLocation}
+              onLocationSelect={setSelectedLocation}
+            />
           </CardContent>
         </Card>
       </div>

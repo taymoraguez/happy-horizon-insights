@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface CalendarViewProps {
   selectedDate: Date | null;
@@ -19,6 +19,13 @@ const happinessData = {
   '2024-01-19': { score: 5.4, messages: ['Feeling a bit down', 'Rainy weather all day'] },
   '2024-01-20': { score: 8.9, messages: ['Weekend trip to the mountains', 'Beautiful sunset photos'] },
   '2024-01-21': { score: 7.2, messages: ['Lazy Sunday morning', 'Caught up on reading'] },
+  '2024-01-22': { score: 8.3, messages: ['Great workout session', 'Met old friends'] },
+  '2024-01-23': { score: 6.8, messages: ['Busy day at work', 'Ordered takeout'] },
+  '2024-01-24': { score: 9.0, messages: ['Perfect weather today', 'Completed a challenging project'] },
+  '2024-01-25': { score: 7.5, messages: ['Relaxing evening', 'Watched a good movie'] },
+  '2024-01-26': { score: 5.8, messages: ['Feeling tired', 'Long commute'] },
+  '2024-01-27': { score: 8.7, messages: ['Family dinner', 'Played board games'] },
+  '2024-01-28': { score: 7.1, messages: ['Productive Sunday', 'Meal prep for the week'] },
 };
 
 const getHappinessColor = (score: number) => {
@@ -38,7 +45,8 @@ const getHappinessLevel = (score: number) => {
 };
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ selectedDate, onDateSelect }) => {
-  const [currentWeekStart, setCurrentWeekStart] = useState(new Date('2024-01-15'));
+  const [currentDate, setCurrentDate] = useState(new Date('2024-01-15'));
+  const [viewMode, setViewMode] = useState<'weekly' | 'monthly'>('weekly');
 
   const generateWeekDays = (startDate: Date) => {
     const days = [];
@@ -50,13 +58,42 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ selectedDate, onDate
     return days;
   };
 
-  const weekDays = generateWeekDays(currentWeekStart);
+  const generateMonthDays = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDate = new Date(firstDay);
+    
+    // Get the first day of the week for the first day of the month
+    startDate.setDate(startDate.getDate() - startDate.getDay());
+    
+    const days = [];
+    const current = new Date(startDate);
+    
+    // Generate 6 weeks worth of days (42 days)
+    for (let i = 0; i < 42; i++) {
+      days.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return { days, currentMonth: month, currentYear: year };
+  };
 
   const navigateWeek = (direction: 'prev' | 'next') => {
-    const newDate = new Date(currentWeekStart);
+    const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
-    setCurrentWeekStart(newDate);
+    setCurrentDate(newDate);
   };
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    const newDate = new Date(currentDate);
+    newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
+    setCurrentDate(newDate);
+  };
+
+  const weekDays = generateWeekDays(currentDate);
+  const monthData = generateMonthDays(currentDate);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -67,55 +104,128 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ selectedDate, onDate
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Weekly Happiness Calendar
+                  <CalendarIcon className="h-5 w-5" />
+                  Happiness Calendar
                 </CardTitle>
                 <CardDescription>
-                  Click on any day to view detailed happiness data and messages
+                  {viewMode === 'weekly' ? 'Weekly view' : 'Monthly view'} - Click on any day to view detailed happiness data
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => navigateWeek('prev')}>
-                  Previous
+                <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                  <Button
+                    variant={viewMode === 'weekly' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('weekly')}
+                    className="px-3 py-1 text-xs"
+                  >
+                    Weekly
+                  </Button>
+                  <Button
+                    variant={viewMode === 'monthly' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('monthly')}
+                    className="px-3 py-1 text-xs"
+                  >
+                    Monthly
+                  </Button>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => viewMode === 'weekly' ? navigateWeek('prev') : navigateMonth('prev')}
+                >
+                  <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => navigateWeek('next')}>
-                  Next
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => viewMode === 'weekly' ? navigateWeek('next') : navigateMonth('next')}
+                >
+                  <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-7 gap-2 mb-6">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
-                  {day}
+            {viewMode === 'weekly' ? (
+              <>
+                <div className="text-center mb-4 text-lg font-semibold text-gray-700">
+                  Week of {currentDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </div>
-              ))}
-              {weekDays.map((date) => {
-                const dateKey = date.toISOString().split('T')[0];
-                const dayData = happinessData[dateKey];
-                const isSelected = selectedDate?.toDateString() === date.toDateString();
-                
-                return (
-                  <div
-                    key={dateKey}
-                    className={`relative p-4 rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 ${
-                      isSelected ? 'ring-2 ring-blue-500 ring-offset-2' : ''
-                    } ${dayData ? getHappinessColor(dayData.score) : 'bg-gray-100'}`}
-                    onClick={() => onDateSelect(date)}
-                  >
-                    <div className="text-white font-semibold text-center">
-                      {date.getDate()}
+                <div className="grid grid-cols-7 gap-2 mb-6">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                    <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+                      {day}
                     </div>
-                    {dayData && (
-                      <div className="text-xs text-white text-center mt-1 font-bold">
-                        {dayData.score}
+                  ))}
+                  {weekDays.map((date) => {
+                    const dateKey = date.toISOString().split('T')[0];
+                    const dayData = happinessData[dateKey];
+                    const isSelected = selectedDate?.toDateString() === date.toDateString();
+                    
+                    return (
+                      <div
+                        key={dateKey}
+                        className={`relative p-4 rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 ${
+                          isSelected ? 'ring-2 ring-blue-500 ring-offset-2' : ''
+                        } ${dayData ? getHappinessColor(dayData.score) : 'bg-gray-100'}`}
+                        onClick={() => onDateSelect(date)}
+                      >
+                        <div className={`font-semibold text-center ${dayData ? 'text-white' : 'text-gray-600'}`}>
+                          {date.getDate()}
+                        </div>
+                        {dayData && (
+                          <div className="text-xs text-white text-center mt-1 font-bold">
+                            {dayData.score}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-center mb-4 text-lg font-semibold text-gray-700">
+                  {new Date(monthData.currentYear, monthData.currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                </div>
+                <div className="grid grid-cols-7 gap-1 mb-6">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                    <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+                      {day}
+                    </div>
+                  ))}
+                  {monthData.days.map((date, index) => {
+                    const dateKey = date.toISOString().split('T')[0];
+                    const dayData = happinessData[dateKey];
+                    const isSelected = selectedDate?.toDateString() === date.toDateString();
+                    const isCurrentMonth = date.getMonth() === monthData.currentMonth;
+                    
+                    return (
+                      <div
+                        key={index}
+                        className={`relative p-2 rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 min-h-[50px] flex flex-col items-center justify-center ${
+                          isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : ''
+                        } ${dayData ? getHappinessColor(dayData.score) : 'bg-gray-100'} ${
+                          !isCurrentMonth ? 'opacity-40' : ''
+                        }`}
+                        onClick={() => onDateSelect(date)}
+                      >
+                        <div className={`text-sm font-semibold ${dayData ? 'text-white' : 'text-gray-600'}`}>
+                          {date.getDate()}
+                        </div>
+                        {dayData && (
+                          <div className="text-xs text-white font-bold">
+                            {dayData.score}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             
             {/* Legend */}
             <div className="flex flex-wrap gap-4 text-sm">
