@@ -85,7 +85,7 @@ const GoogleMapComponent: React.FC<{
     // Load Google Maps API if not already loaded
     if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAdCr3UAgIRirmMnfGy5Tuc0QwiHJbyEEM&callback=initMap`;
       script.async = true;
       script.defer = true;
       
