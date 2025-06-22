@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +14,12 @@ const locationData = [
   { id: 7, name: 'Restaurant District', lat: 40.7505, lng: -73.9865, score: 8.7, city: 'New York', visits: 15 },
   { id: 8, name: 'Library', lat: 40.7532, lng: -73.9822, score: 7.3, city: 'New York', visits: 9 },
 ];
+
+declare global {
+  interface Window {
+    initMap: () => void;
+  }
+}
 
 const GoogleMapComponent: React.FC<{
   locations: typeof locationData;
@@ -78,14 +83,14 @@ const GoogleMapComponent: React.FC<{
     };
 
     // Load Google Maps API if not already loaded
-    if (typeof google === 'undefined') {
+    if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
       const script = document.createElement('script');
       script.src = `https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap`;
       script.async = true;
       script.defer = true;
       
       // Set up callback
-      (window as any).initMap = initMap;
+      window.initMap = initMap;
       
       document.head.appendChild(script);
     } else {
