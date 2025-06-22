@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { CalendarView } from '@/components/CalendarView';
 import { MapView } from '@/components/MapView';
@@ -6,9 +5,18 @@ import { WebsiteAnalytics } from '@/components/WebsiteAnalytics';
 import { MessageAnalytics } from '@/components/MessageAnalytics';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { RefreshCw } from 'lucide-react';
 
 const Index = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    // You can add additional refresh logic here if needed
+    console.log('Refreshing stats...');
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
@@ -23,6 +31,15 @@ const Index = () => {
               <p className="text-gray-600 mt-1">Your Personal Happiness Analytics Dashboard</p>
             </div>
             <div className="flex items-center space-x-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefresh}
+                className="h-9 w-9 hover:bg-gray-100/80"
+                title="Refresh Stats"
+              >
+                <RefreshCw className="h-4 w-4 text-gray-600" />
+              </Button>
               <div className="text-right">
                 <div className="text-2xl font-bold text-green-600">8.2</div>
                 <div className="text-sm text-gray-500">Current Happiness Score</div>
@@ -33,7 +50,7 @@ const Index = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-6 py-8">
+      <main className="container mx-auto px-6 py-8" key={refreshKey}>
         {/* Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
