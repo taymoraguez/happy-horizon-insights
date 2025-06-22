@@ -52,6 +52,33 @@ export interface Place {
   created_at: string;
 }
 
+export interface WebsiteAnalysis {
+  id: number;
+  domain: string;
+  example_url: string;
+  correlation_coefficient: number;
+  days_visited: number;
+  days_not_visited: number;
+  avg_sentiment_when_visited: number;
+  avg_sentiment_when_not_visited: number;
+  total_visits: number;
+  significance_score: number;
+  created_at: string;
+}
+
+export interface PersonAnalysis {
+  id: number;
+  contact_name: string;
+  correlation_coefficient: number;
+  days_interacted: number;
+  days_not_interacted: number;
+  avg_sentiment_when_interacted: number;
+  avg_sentiment_when_not_interacted: number;
+  total_messages: number;
+  significance_score: number;
+  created_at: string;
+}
+
 interface ApiFilters {
   start_date?: string;
   end_date?: string;
@@ -301,6 +328,133 @@ export const usePlaces = (filters?: ApiFilters) => {
 
     fetchData();
   }, [filters?.time_analysis, filters?.limit]);
+
+  return { data, loading, error };
+};
+
+export const useLatestTimeAnalysis = () => {
+  const [data, setData] = useState<TimeAnalysis | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(
+          "/api/time-analyses/?limit=1&ordering=-created_at"
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const analyses = result.results || result;
+        setData(analyses.length > 0 ? analyses[0] : null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  return { data, loading, error };
+};
+
+export const useWebsiteAnalyses = (filters?: ApiFilters) => {
+  const [data, setData] = useState<WebsiteAnalysis[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Get latest analysis if no time_analysis specified
+  const { data: latestAnalysis, loading: latestLoading } =
+    useLatestTimeAnalysis();
+  const timeAnalysisId = filters?.time_analysis || latestAnalysis?.id;
+
+  useEffect(() => {
+    if (latestLoading || (!timeAnalysisId && !filters?.time_analysis)) return;
+
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const params = new URLSearchParams();
+        if (timeAnalysisId)
+          params.append("time_analysis", timeAnalysisId.toString());
+        if (filters?.limit) params.append("limit", filters.limit.toString());
+
+        const response = await fetch(
+          `/api/website-analyses/?${params.toString()}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        setData(result.results || result); // Handle paginated or direct array response
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [timeAnalysisId, latestLoading, filters?.limit]);
+
+  return { data, loading, error };
+};
+
+export const usePersonAnalyses = (filters?: ApiFilters) => {
+  const [data, setData] = useState<PersonAnalysis[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Get latest analysis if no time_analysis specified
+  const { data: latestAnalysis, loading: latestLoading } =
+    useLatestTimeAnalysis();
+  const timeAnalysisId = filters?.time_analysis || latestAnalysis?.id;
+
+  useEffect(() => {
+    if (latestLoading || (!timeAnalysisId && !filters?.time_analysis)) return;
+
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const params = new URLSearchParams();
+        if (timeAnalysisId)
+          params.append("time_analysis", timeAnalysisId.toString());
+        if (filters?.limit) params.append("limit", filters.limit.toString());
+
+        const response = await fetch(
+          `/api/person-analyses/?${params.toString()}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        setData(result.results || result); // Handle paginated or direct array response
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [timeAnalysisId, latestLoading, filters?.limit]);
 
   return { data, loading, error };
 };

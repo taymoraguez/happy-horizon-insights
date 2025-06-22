@@ -85,8 +85,8 @@ const loadGoogleMaps = (() => {
       // Create unique callback name
       const callbackName = `initMap_${Date.now()}`;
 
-      (window as any)[callbackName] = () => {
-        delete (window as any)[callbackName];
+      (window as unknown as Record<string, () => void>)[callbackName] = () => {
+        delete (window as unknown as Record<string, () => void>)[callbackName];
         resolve(google);
       };
 
@@ -123,124 +123,85 @@ const GoogleMapComponent: React.FC<{
   };
 
   useEffect(() => {
-    let script: HTMLScriptElement | null = null;
+    if (locations.length === 0) return;
 
-    const initMap = () => {
-      const mapElement = document.getElementById("google-map");
-      if (!mapElement || locations.length === 0) return;
+    const initMap = async () => {
+      try {
+        await loadGoogleMaps();
 
-      // Calculate center from all locations
-      const validLocations = locations.filter(
-        (loc) =>
-          !isNaN(loc.lat) &&
-          !isNaN(loc.lng) &&
-          isFinite(loc.lat) &&
-          isFinite(loc.lng)
-      );
+        const mapElement = document.getElementById("google-map");
+        if (!mapElement) return;
 
-      if (validLocations.length === 0) {
-        console.warn("No valid locations with finite coordinates");
-        return;
+        // Calculate center from all locations
+        const validLocations = locations.filter(
+          (loc) =>
+            !isNaN(loc.lat) &&
+            !isNaN(loc.lng) &&
+            isFinite(loc.lat) &&
+            isFinite(loc.lng)
+        );
+
+        if (validLocations.length === 0) {
+          console.warn("No valid locations with finite coordinates");
+          return;
+        }
+
+        const avgLat =
+          validLocations.reduce((sum, loc) => sum + loc.lat, 0) /
+          validLocations.length;
+        const avgLng =
+          validLocations.reduce((sum, loc) => sum + loc.lng, 0) /
+          validLocations.length;
+
+        const newMap = new google.maps.Map(mapElement, {
+          center: { lat: avgLat, lng: avgLng },
+          zoom: 12,
+          styles: [
+            {
+              featureType: "poi",
+              elementType: "labels",
+              stylers: [{ visibility: "off" }],
+            },
+          ],
+        });
+
+        setMap(newMap);
+        setIsMapLoaded(true);
+
+        // Create markers
+        const newMarkers = validLocations.map((location) => {
+          const marker = new google.maps.Marker({
+            position: { lat: location.lat, lng: location.lng },
+            map: newMap,
+            title: `${location.name} (Score: ${location.score}, Visits: ${location.visits})`,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              fillColor: getMarkerColor(location.score),
+              fillOpacity: 1,
+              strokeWeight: 2,
+              strokeColor: "#ffffff",
+              scale: Math.max(8, Math.min(location.visits / 2, 15)), // Scale marker size by visits
+            },
+          });
+
+          marker.addListener("click", () => {
+            onLocationSelect(location);
+          });
+
+          return marker;
+        });
+
+        setMarkers(newMarkers);
+      } catch (error) {
+        console.error("Failed to load Google Maps:", error);
       }
-
-      const avgLat =
-        validLocations.reduce((sum, loc) => sum + loc.lat, 0) /
-        validLocations.length;
-      const avgLng =
-        validLocations.reduce((sum, loc) => sum + loc.lng, 0) /
-        validLocations.length;
-
-      const newMap = new google.maps.Map(mapElement, {
-        center: { lat: avgLat, lng: avgLng },
-        zoom: 12,
-        styles: [
-          {
-            featureType: "poi",
-            elementType: "labels",
-            stylers: [{ visibility: "off" }],
-          },
-        ],
-      });
-
-      setMap(newMap);
-      setIsMapLoaded(true);
-
-      // Create markers
-      const newMarkers = validLocations.map((location) => {
-        const marker = new google.maps.Marker({
-          position: { lat: location.lat, lng: location.lng },
-          map: newMap,
-          title: `${location.name} (Score: ${location.score}, Visits: ${location.visits})`,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            fillColor: getMarkerColor(location.score),
-            fillOpacity: 1,
-            strokeWeight: 2,
-            strokeColor: "#ffffff",
-            scale: Math.max(8, Math.min(location.visits / 2, 15)), // Scale marker size by visits
-          },
-        });
-
-        marker.addListener("click", () => {
-          onLocationSelect(location);
-        });
-
-        return marker;
-      });
-
-      setMarkers(newMarkers);
     };
 
-    // Check if Google Maps is already loaded
-    if (typeof google !== "undefined" && typeof google.maps !== "undefined") {
-      initMap();
-    } else {
-      // Check if script is already loading/loaded
-      const existingScript = document.querySelector(
-        'script[src*="maps.googleapis.com"]'
-      );
-
-      if (!existingScript && !window.googleMapsLoaded) {
-        script = document.createElement("script");
-        script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAdCr3UAgIRirmMnfGy5Tuc0QwiHJbyEEM&callback=initMapCallback`;
-        script.async = true;
-        script.defer = true;
-
-        // Set up a global callback that will call our local initMap
-        window.initMapCallback = () => {
-          window.googleMapsLoaded = true;
-          initMap();
-        };
-
-        document.head.appendChild(script);
-      } else if (window.googleMapsLoaded) {
-        // Maps already loaded, just initialize
-        initMap();
-      } else {
-        // Script is loading, wait for it
-        const checkLoaded = setInterval(() => {
-          if (
-            typeof google !== "undefined" &&
-            typeof google.maps !== "undefined"
-          ) {
-            clearInterval(checkLoaded);
-            initMap();
-          }
-        }, 100);
-
-        // Clean up interval after 10 seconds to avoid memory leaks
-        setTimeout(() => clearInterval(checkLoaded), 10000);
-      }
-    }
+    initMap();
 
     return () => {
       // Cleanup markers
       markers.forEach((marker) => marker.setMap(null));
-
-      // Clean up callbacks (but be careful not to interfere with other instances)
-      if (window.initMap === initMap) {
-        delete window.initMap;
-      }
     };
   }, [locations]);
 

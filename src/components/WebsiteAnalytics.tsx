@@ -1,55 +1,82 @@
-
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { ExternalLink, Globe, TrendingUp, TrendingDown } from 'lucide-react';
-
-// Mock website data with happiness scores
-const websiteData = [
-  { id: 1, name: 'YouTube', url: 'youtube.com', score: 8.9, visits: 156, category: 'Entertainment' },
-  { id: 2, name: 'Spotify', url: 'spotify.com', score: 8.7, visits: 89, category: 'Music' },
-  { id: 3, name: 'Instagram', url: 'instagram.com', score: 8.2, visits: 134, category: 'Social Media' },
-  { id: 4, name: 'GitHub', url: 'github.com', score: 7.8, visits: 78, category: 'Development' },
-  { id: 5, name: 'Netflix', url: 'netflix.com', score: 8.5, visits: 67, category: 'Entertainment' },
-  { id: 6, name: 'Medium', url: 'medium.com', score: 7.9, visits: 45, category: 'Reading' },
-  { id: 7, name: 'Reddit', url: 'reddit.com', score: 7.2, visits: 98, category: 'Social Media' },
-  { id: 8, name: 'LinkedIn', url: 'linkedin.com', score: 6.8, visits: 56, category: 'Professional' },
-  { id: 9, name: 'Stack Overflow', url: 'stackoverflow.com', score: 6.5, visits: 43, category: 'Development' },
-  { id: 10, name: 'Twitter', url: 'twitter.com', score: 5.9, visits: 87, category: 'Social Media' },
-  { id: 11, name: 'News Site', url: 'cnn.com', score: 4.8, visits: 34, category: 'News' },
-  { id: 12, name: 'Work Portal', url: 'company-portal.com', score: 4.2, visits: 67, category: 'Work' },
-  { id: 13, name: 'Banking Site', url: 'bank.com', score: 3.9, visits: 23, category: 'Finance' },
-];
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { useWebsiteAnalyses, WebsiteAnalysis } from "@/hooks/useApi";
+import {
+  ExternalLink,
+  Globe,
+  Loader2,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
+import React, { useState } from "react";
 
 const getHappinessColor = (score: number) => {
-  if (score >= 8) return 'text-green-600 bg-green-100';
-  if (score >= 7) return 'text-green-500 bg-green-50';
-  if (score >= 6) return 'text-yellow-600 bg-yellow-100';
-  if (score >= 5) return 'text-orange-600 bg-orange-100';
-  return 'text-red-600 bg-red-100';
+  if (score >= 0.5) return "text-green-600 bg-green-100";
+  if (score >= 0.2) return "text-green-500 bg-green-50";
+  if (score >= -0.2) return "text-yellow-600 bg-yellow-100";
+  if (score >= -0.5) return "text-orange-600 bg-orange-100";
+  return "text-red-600 bg-red-100";
 };
 
-const getCategoryColor = (category: string) => {
-  const colors = {
-    'Entertainment': 'bg-purple-100 text-purple-800',
-    'Music': 'bg-pink-100 text-pink-800',
-    'Social Media': 'bg-blue-100 text-blue-800',
-    'Development': 'bg-gray-100 text-gray-800',
-    'Reading': 'bg-indigo-100 text-indigo-800',
-    'Professional': 'bg-green-100 text-green-800',
-    'News': 'bg-red-100 text-red-800',
-    'Work': 'bg-orange-100 text-orange-800',
-    'Finance': 'bg-yellow-100 text-yellow-800',
-  };
-  return colors[category] || 'bg-gray-100 text-gray-800';
+const formatDomain = (domain: string) => {
+  // Add www. prefix if not present for display
+  return domain.startsWith("www.") ? domain : `www.${domain}`;
+};
+
+const getCorrelationLabel = (score: number) => {
+  if (score >= 0.5) return "Very Positive Impact";
+  if (score >= 0.2) return "Positive Impact";
+  if (score >= -0.2) return "Neutral Impact";
+  if (score >= -0.5) return "Negative Impact";
+  return "Very Negative Impact";
 };
 
 export const WebsiteAnalytics: React.FC = () => {
-  const [selectedWebsite, setSelectedWebsite] = useState<typeof websiteData[0] | null>(null);
+  const [selectedWebsite, setSelectedWebsite] =
+    useState<WebsiteAnalysis | null>(null);
 
-  // Sort websites by happiness score
-  const sortedByHappiness = [...websiteData].sort((a, b) => b.score - a.score);
+  // Automatically uses the latest TimeAnalysis
+  const { data: websiteData, loading, error } = useWebsiteAnalyses();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+        <span className="ml-2 text-gray-500">Loading website analytics...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center text-red-600 p-8">
+        <p>Error loading website analytics: {error}</p>
+      </div>
+    );
+  }
+
+  if (!websiteData || websiteData.length === 0) {
+    return (
+      <div className="text-center text-gray-500 p-8">
+        <Globe className="h-8 w-8 mx-auto mb-2 opacity-50" />
+        <p>
+          No website analytics data available. Run a sentiment analysis first.
+        </p>
+      </div>
+    );
+  }
+
+  // Sort websites by correlation coefficient
+  const sortedByHappiness = [...websiteData].sort(
+    (a, b) => b.correlation_coefficient - a.correlation_coefficient
+  );
   const topTen = sortedByHappiness.slice(0, 10);
   const bottomTen = sortedByHappiness.slice(-10).reverse();
 
@@ -81,31 +108,54 @@ export const WebsiteAnalytics: React.FC = () => {
                       {index + 1}
                     </div>
                     <div>
-                      <div className="font-semibold text-gray-800">{website.name}</div>
+                      <div className="font-semibold text-gray-800">
+                        {website.domain}
+                      </div>
                       <div className="text-sm text-gray-600 flex items-center gap-2">
                         <Globe className="h-3 w-3" />
-                        {website.url}
+                        {formatDomain(website.domain)}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge className={getCategoryColor(website.category)} variant="secondary">
-                          {website.category}
-                        </Badge>
-                        <span className="text-xs text-gray-500">{website.visits} visits</span>
+                        <span className="text-xs text-gray-500">
+                          {website.days_visited} days visited
+                        </span>
+                        <span className="text-xs text-gray-400">•</span>
+                        <span className="text-xs text-gray-500">
+                          {website.total_visits} total visits
+                        </span>
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-green-600">{website.score}</div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(`https://${website.url}`, '_blank');
-                      }}
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
+                    <div className="text-2xl font-bold text-green-600">
+                      {website.correlation_coefficient.toFixed(3)}
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(`https://${website.domain}`, "_blank");
+                        }}
+                        title="Visit domain homepage"
+                      >
+                        <Globe className="h-4 w-4" />
+                      </Button>
+                      {website.example_url && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(website.example_url, "_blank");
+                          }}
+                          title="Visit example page"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -137,27 +187,34 @@ export const WebsiteAnalytics: React.FC = () => {
                       {index + 1}
                     </div>
                     <div>
-                      <div className="font-semibold text-gray-800">{website.name}</div>
+                      <div className="font-semibold text-gray-800">
+                        {website.domain}
+                      </div>
                       <div className="text-sm text-gray-600 flex items-center gap-2">
                         <Globe className="h-3 w-3" />
-                        {website.url}
+                        {formatDomain(website.domain)}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge className={getCategoryColor(website.category)} variant="secondary">
-                          {website.category}
-                        </Badge>
-                        <span className="text-xs text-gray-500">{website.visits} visits</span>
+                        <span className="text-xs text-gray-500">
+                          {website.days_visited} days visited
+                        </span>
+                        <span className="text-xs text-gray-400">•</span>
+                        <span className="text-xs text-gray-500">
+                          {website.total_visits} total visits
+                        </span>
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-red-600">{website.score}</div>
-                    <Button 
-                      variant="ghost" 
+                    <div className="text-2xl font-bold text-red-600">
+                      {website.correlation_coefficient.toFixed(3)}
+                    </div>
+                    <Button
+                      variant="ghost"
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        window.open(`https://${website.url}`, '_blank');
+                        window.open(`https://${website.domain}`, "_blank");
                       }}
                     >
                       <ExternalLink className="h-4 w-4" />
@@ -176,24 +233,32 @@ export const WebsiteAnalytics: React.FC = () => {
           <CardHeader>
             <CardTitle>Website Details</CardTitle>
             <CardDescription>
-              {selectedWebsite 
-                ? `Analysis for ${selectedWebsite.name}`
-                : 'Click on a website to view detailed analytics'
-              }
+              {selectedWebsite
+                ? `Analysis for ${selectedWebsite.domain}`
+                : "Click on a website to view detailed analytics"}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {selectedWebsite ? (
               <div className="space-y-6">
                 <div className="text-center">
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">{selectedWebsite.name}</h3>
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">
+                    {selectedWebsite.domain}
+                  </h3>
                   <div className="flex items-center justify-center gap-2 mb-4">
                     <Globe className="h-4 w-4 text-gray-500" />
-                    <span className="text-gray-600">{selectedWebsite.url}</span>
-                    <Button 
-                      variant="ghost" 
+                    <span className="text-gray-600">
+                      {formatDomain(selectedWebsite.domain)}
+                    </span>
+                    <Button
+                      variant="ghost"
                       size="sm"
-                      onClick={() => window.open(`https://${selectedWebsite.url}`, '_blank')}
+                      onClick={() =>
+                        window.open(
+                          `https://${selectedWebsite.domain}`,
+                          "_blank"
+                        )
+                      }
                     >
                       <ExternalLink className="h-4 w-4" />
                     </Button>
@@ -201,53 +266,100 @@ export const WebsiteAnalytics: React.FC = () => {
                 </div>
 
                 <div className="text-center">
-                  <div className="text-4xl font-bold text-gray-800 mb-2">{selectedWebsite.score}</div>
-                  <Badge className={getHappinessColor(selectedWebsite.score)}>
-                    {selectedWebsite.score >= 8 ? 'Very Happy' : 
-                     selectedWebsite.score >= 7 ? 'Happy' :
-                     selectedWebsite.score >= 6 ? 'Neutral' :
-                     selectedWebsite.score >= 5 ? 'Somewhat Negative' : 'Negative Impact'}
+                  <div className="text-4xl font-bold text-gray-800 mb-2">
+                    {selectedWebsite.correlation_coefficient.toFixed(3)}
+                  </div>
+                  <Badge
+                    className={getHappinessColor(
+                      selectedWebsite.correlation_coefficient
+                    )}
+                  >
+                    {getCorrelationLabel(
+                      selectedWebsite.correlation_coefficient
+                    )}
                   </Badge>
                 </div>
 
                 <div className="space-y-4">
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <span className="text-gray-600">Category</span>
-                    <Badge className={getCategoryColor(selectedWebsite.category)} variant="secondary">
-                      {selectedWebsite.category}
-                    </Badge>
+                    <span className="text-gray-600">Days Visited</span>
+                    <span className="font-semibold">
+                      {selectedWebsite.days_visited}
+                    </span>
                   </div>
-                  
+
+                  <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <span className="text-gray-600">Days Not Visited</span>
+                    <span className="font-semibold">
+                      {selectedWebsite.days_not_visited}
+                    </span>
+                  </div>
+
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <span className="text-gray-600">Total Visits</span>
-                    <span className="font-semibold">{selectedWebsite.visits}</span>
+                    <span className="font-semibold">
+                      {selectedWebsite.total_visits}
+                    </span>
                   </div>
-                  
+
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <span className="text-gray-600">Happiness Rank</span>
                     <span className="font-semibold">
-                      #{sortedByHappiness.findIndex(w => w.id === selectedWebsite.id) + 1} of {websiteData.length}
+                      #
+                      {sortedByHappiness.findIndex(
+                        (w) => w.id === selectedWebsite.id
+                      ) + 1}{" "}
+                      of {websiteData.length}
                     </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <div className="text-sm text-green-600 font-medium">
+                        Avg Sentiment When Visited
+                      </div>
+                      <div className="text-lg font-bold text-green-700">
+                        {selectedWebsite.avg_sentiment_when_visited.toFixed(3)}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-red-50 rounded-lg">
+                      <div className="text-sm text-red-600 font-medium">
+                        Avg Sentiment When Not Visited
+                      </div>
+                      <div className="text-lg font-bold text-red-700">
+                        {selectedWebsite.avg_sentiment_when_not_visited.toFixed(
+                          3
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {/* Recommendations */}
                 <div className="p-4 bg-blue-50 rounded-lg">
-                  <h4 className="font-semibold text-blue-800 mb-2">💡 Insights</h4>
+                  <h4 className="font-semibold text-blue-800 mb-2">
+                    💡 Insights
+                  </h4>
                   <p className="text-sm text-blue-700">
-                    {selectedWebsite.score >= 8 
+                    {selectedWebsite.correlation_coefficient >= 0.2
                       ? "This website consistently brings you joy! Consider spending more time here when you need a mood boost."
-                      : selectedWebsite.score >= 6
+                      : selectedWebsite.correlation_coefficient >= -0.2
                       ? "This website has a neutral impact on your mood. It might be worth monitoring your usage patterns."
-                      : "This website might be impacting your happiness negatively. Consider limiting your time here or being more mindful when visiting."
-                    }
+                      : "This website might be impacting your happiness negatively. Consider limiting your time here or being more mindful when visiting."}
                   </p>
+                  <div className="mt-2 text-xs text-blue-600">
+                    Significance Score:{" "}
+                    {selectedWebsite.significance_score.toFixed(3)}
+                  </div>
                 </div>
               </div>
             ) : (
               <div className="text-center text-gray-500 py-8">
                 <Globe className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>Select a website from the lists to view detailed analytics and insights</p>
+                <p>
+                  Select a website from the lists to view detailed analytics and
+                  insights
+                </p>
               </div>
             )}
           </CardContent>
