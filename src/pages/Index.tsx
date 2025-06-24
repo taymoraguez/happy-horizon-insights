@@ -237,25 +237,25 @@ const Index = () => {
           <TabsList className="grid w-full grid-cols-4 bg-white/50 backdrop-blur-sm">
             <TabsTrigger
               value="calendar"
-              className="data-[state=active]:bg-white data-[state=active]:shadow-md"
+              className="data-[state=active]:bg-white data-[state=active]:shadow-sm"
             >
               Calendar View
             </TabsTrigger>
             <TabsTrigger
               value="map"
-              className="data-[state=active]:bg-white data-[state=active]:shadow-md"
+              className="data-[state=active]:bg-white data-[state=active]:shadow-sm"
             >
               Location Map
             </TabsTrigger>
             <TabsTrigger
               value="websites"
-              className="data-[state=active]:bg-white data-[state=active]:shadow-md"
+              className="data-[state=active]:bg-white data-[state=active]:shadow-sm"
             >
               Website Analytics
             </TabsTrigger>
             <TabsTrigger
               value="messages"
-              className="data-[state=active]:bg-white data-[state=active]:shadow-md"
+              className="data-[state=active]:bg-white data-[state=active]:shadow-sm"
             >
               People Analytics
             </TabsTrigger>
